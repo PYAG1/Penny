@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1768683764051,
+      "tag": "0000_bent_zarek",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768685397132,
+      "tag": "0001_add-chunks-table",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768689042029,
+      "tag": "0002_add-section-to-chunks",
+      "breakpoints": true
+    }
+  ]
+}
