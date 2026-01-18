@@ -57,22 +57,22 @@ export const webExtractionService = {
   isYouTubeUrl(url: string): boolean {
     return url.includes('youtube.com/watch') || url.includes('youtu.be/');
   },
-
-  /**
-   * Extract YouTube video ID from URL
-   */
-  extractYouTubeId(url: string): string {
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
-      /youtube\.com\/embed\/([^&\n?#]+)/,
-      /youtube\.com\/v\/([^&\n?#]+)/,
-    ];
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return match[1];
-    }
-
-    throw new Error('Invalid YouTube URL');
-  },
 };
+
+/**
+ * Extract YouTube video ID from URL
+ */
+export function extractYouTubeId(url: string): string {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+    /youtube\.com\/embed\/([^&\n?#]+)/,
+    /youtube\.com\/v\/([^&\n?#]+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+
+  throw new Error('Invalid YouTube URL');
+}

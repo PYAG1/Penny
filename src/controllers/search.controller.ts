@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { generateEmbedding } from '../lib/ai';
+import { generateEmbedding } from '../lib/ai/embeddings';
 import { contentRepository } from '../repositories';
 import { successResponse, errorResponse } from '../utils/response';
 import { getSafeErrorMessage } from '../utils/error';

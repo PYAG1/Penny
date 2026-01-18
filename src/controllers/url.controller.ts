@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { nanoid } from 'nanoid';
 import { contentRepository } from '../repositories';
-import { webExtractionService, youtubeExtractionService } from '../services';
-import { generateEmbeddings, chunkText, chunkDocument } from '../lib/ai';
+import { webExtractionService } from '../lib/extraction/web';
+import { youtubeExtractionService } from '../lib/extraction/youtube';
+import { generateEmbeddings, chunkText, chunkDocument } from '../lib/ai/embeddings';
 import { createUrlContentSchema } from '../lib/validation';
 import { successResponse, errorResponse } from '../utils/response';
 import { getErrorMessage, getSafeErrorMessage } from '../utils/error';
@@ -36,6 +37,7 @@ urlController.post(
         ? await youtubeExtractionService.extractContent(url)
         : await webExtractionService.extractContent(url);
 
+        console.log(extractedContent)
       // Step 2: Save content to database (without embedding)
       const content = await contentRepository.create({
         id: contentId,

@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { contentRepository } from '../repositories';
-import { blobStorageService, imageAnalysisService } from '../services';
-import { generateEmbeddings, chunkText } from '../lib/ai';
+import { blobStorageService } from '../lib/storage/blob';
+import { imageAnalysisService } from '../lib/ai/image-analysis';
+import { generateEmbeddings, chunkText } from '../lib/ai/embeddings';
 import { successResponse, errorResponse } from '../utils/response';
 import { getErrorMessage, getSafeErrorMessage } from '../utils/error';
 
