@@ -1,13 +1,10 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { nanoid } from 'nanoid';
+import { contentService } from '../services/content.service';
 import { contentRepository } from '../repositories';
-import { webExtractionService } from '../lib/extraction/web';
-import { youtubeExtractionService } from '../lib/extraction/youtube';
-import { generateEmbeddings, chunkText, chunkDocument } from '../lib/ai/embeddings';
 import { createUrlContentSchema } from '../lib/validation';
 import { successResponse, errorResponse } from '../utils/response';
-import { getErrorMessage, getSafeErrorMessage } from '../utils/error';
+import { getSafeErrorMessage } from '../utils/error';
 
 const urlController = new Hono();
 
@@ -26,98 +23,29 @@ urlController.post(
     }
   }),
   async (c) => {
-    const { url, userNote } = c.req.valid('json');
-
-    const contentId = `url_${nanoid()}`;
-    const isYouTube = webExtractionService.isYouTubeUrl(url);
-
     try {
-      // Step 1: Extract content
-      const extractedContent = isYouTube
-        ? await youtubeExtractionService.extractContent(url)
-        : await webExtractionService.extractContent(url);
+      // Extract request data
+      const { url, userNote } = c.req.valid('json');
 
-        console.log(extractedContent)
-      // Step 2: Save content to database (without embedding)
-      const content = await contentRepository.create({
-        id: contentId,
-        type: isYouTube ? 'youtube' : 'webpage',
-        url,
-        title: extractedContent.title,
-        description: extractedContent.description,
-        contentPreview: extractedContent.content.substring(0, 500),
-        imageUrl: extractedContent.thumbnail,
-        status: 'completed',
-        metadata: {
-          domain: extractedContent.metadata.domain,
-          favicon: 'favicon' in extractedContent.metadata ? extractedContent.metadata.favicon : undefined,
-          author: 'author' in extractedContent.metadata ? extractedContent.metadata.author : undefined,
-          channel: 'channel' in extractedContent.metadata ? extractedContent.metadata.channel : undefined,
-          videoId: 'videoId' in extractedContent.metadata ? extractedContent.metadata.videoId : undefined,
-        },
-      });
+      // Delegate to service layer
+      const result = await contentService.processUrl({ url, userNote });
 
-      // Step 3: Chunk the full content and generate embeddings
-      const fullText = userNote
-        ? `${userNote}\n${extractedContent.title}\n${extractedContent.description}\n${extractedContent.content}`
-        : `${extractedContent.title}\n${extractedContent.description}\n${extractedContent.content}`;
-
-      // Use structure-aware chunking for long content (books, long articles)
-      const textChunks = fullText.length > 5000
-        ? chunkDocument(fullText)
-        : chunkText(fullText);
-      const embeddings = await generateEmbeddings(textChunks.map((c) => c.content));
-
-      // Step 4: Save chunks with embeddings
-      await contentRepository.createChunks(
-        contentId,
-        textChunks.map((chunk, i) => ({
-          chunkIndex: chunk.chunkIndex,
-          content: chunk.content,
-          embedding: embeddings[i],
-          startOffset: chunk.startOffset,
-          endOffset: chunk.endOffset,
-          section: chunk.section,
-        }))
-      );
-
+      // Format response
       return c.json(
         successResponse({
           content: {
-            id: content.id,
-            type: content.type,
-            title: content.title,
-            description: content.description,
-            url: content.url,
-            imageUrl: content.imageUrl,
+            id: result.contentId,
+            type: result.type,
+            title: result.title,
+            description: result.description,
+            url: result.url,
+            imageUrl: result.imageUrl,
           },
-          chunksCreated: textChunks.length,
+          chunksCreated: result.chunksCreated,
         })
       );
     } catch (error: unknown) {
-      const errorMsg = getErrorMessage(error);
-      console.error(`[URL] Failed to process ${url}:`, errorMsg);
-
-      // Try to record the failure, but don't let recording failures cause more issues
-      try {
-        await contentRepository.create({
-          id: contentId,
-          type: isYouTube ? 'youtube' : 'webpage',
-          url,
-          title: 'Failed to process',
-          description: 'Content extraction failed',
-          status: 'failed',
-          errorMessage: errorMsg,
-          metadata: {},
-        });
-      } catch (recordError: unknown) {
-        console.error(`[URL] Failed to record failure for ${url}:`, getErrorMessage(recordError));
-      }
-
-      return c.json(
-        errorResponse(getSafeErrorMessage(error)),
-        500
-      );
+      return c.json(errorResponse(getSafeErrorMessage(error)), 500);
     }
   }
 );
@@ -155,74 +83,28 @@ urlController.get('/failed', async (c) => {
  */
 urlController.post('/retry/:id', async (c) => {
   try {
+    // Extract request data
     const { id } = c.req.param();
-    const content = await contentRepository.findById(id);
 
-    if (!content) {
-      return c.json(errorResponse('Content not found'), 404);
-    }
+    // Delegate to service layer
+    const result = await contentService.retryFailedContent(id);
 
-    if (content.status !== 'failed') {
-      return c.json(errorResponse('Content is not in failed state'), 400);
-    }
-
-    if (content.type !== 'image' && content.url) {
-      await contentRepository.updateStatus(id, 'processing');
-
-      try {
-        const isYouTube = webExtractionService.isYouTubeUrl(content.url);
-        const extractedContent = isYouTube
-          ? await youtubeExtractionService.extractContent(content.url)
-          : await webExtractionService.extractContent(content.url);
-
-        // Update content without embedding
-        await contentRepository.update(id, {
-          title: extractedContent.title,
-          description: extractedContent.description,
-          contentPreview: extractedContent.content.substring(0, 500),
-          imageUrl: extractedContent.thumbnail,
-          status: 'completed',
-          errorMessage: null,
-          metadata: {
-            domain: extractedContent.metadata.domain,
-            favicon: 'favicon' in extractedContent.metadata ? extractedContent.metadata.favicon : undefined,
-            author: 'author' in extractedContent.metadata ? extractedContent.metadata.author : undefined,
-            channel: 'channel' in extractedContent.metadata ? extractedContent.metadata.channel : undefined,
-            videoId: 'videoId' in extractedContent.metadata ? extractedContent.metadata.videoId : undefined,
-          },
-        });
-
-        // Delete any existing chunks and create new ones
-        await contentRepository.deleteChunks(id);
-
-        const fullText = `${extractedContent.title}\n${extractedContent.description}\n${extractedContent.content}`;
-        // Use structure-aware chunking for long content
-        const textChunks = fullText.length > 5000
-          ? chunkDocument(fullText)
-          : chunkText(fullText);
-        const embeddings = await generateEmbeddings(textChunks.map((c) => c.content));
-
-        await contentRepository.createChunks(
-          id,
-          textChunks.map((chunk, i) => ({
-            chunkIndex: chunk.chunkIndex,
-            content: chunk.content,
-            embedding: embeddings[i],
-            startOffset: chunk.startOffset,
-            endOffset: chunk.endOffset,
-            section: chunk.section,
-          }))
-        );
-
-        return c.json(successResponse({ contentId: id, chunksCreated: textChunks.length }));
-      } catch (error: unknown) {
-        await contentRepository.updateStatus(id, 'failed', getErrorMessage(error));
-        return c.json(errorResponse(getSafeErrorMessage(error)), 500);
-      }
-    }
-
-    return c.json(errorResponse('Image content requires re-upload to retry'));
+    // Format response
+    return c.json(successResponse({ contentId: id, chunksCreated: result.chunksCreated }));
   } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : getSafeErrorMessage(error);
+
+    if (errorMessage === 'Content not found') {
+      return c.json(errorResponse(errorMessage), 404);
+    }
+
+    if (
+      errorMessage === 'Content is not in failed state' ||
+      errorMessage === 'Image content requires re-upload to retry'
+    ) {
+      return c.json(errorResponse(errorMessage), 400);
+    }
+
     console.error('[Retry] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
