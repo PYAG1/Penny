@@ -1,60 +1,44 @@
-import { Hono } from 'hono';
-import { zValidator } from '@hono/zod-validator';
+import { Context } from 'hono';
 import { contentService } from '../services/content.service';
 import { contentRepository } from '../repositories';
-import { createUrlContentSchema } from '../lib/validation';
 import { successResponse, errorResponse } from '../utils/response';
 import { getSafeErrorMessage } from '../utils/error';
-
-const urlController = new Hono();
+import { CreateUrlInput } from '../lib/validation';
 
 /**
+ * Handle new URL processing
  * POST /api/urls
- * Process a URL (webpage or YouTube video)
  */
-urlController.post(
-  '/',
-  zValidator('json', createUrlContentSchema, (result, c) => {
-    if (!result.success) {
-      return c.json(
-        errorResponse(result.error.issues.map((e) => e.message).join(', ')),
-        400
-      );
-    }
-  }),
-  async (c) => {
-    try {
-      // Extract request data
-      const { url, userNote } = c.req.valid('json');
+export const handleProcessUrl = async (c: Context) => {
+  try {
+    // We assume validation has already passed in the route
+    const { url, userNote } = await c.req.json() as CreateUrlInput;
 
-      // Delegate to service layer
-      const result = await contentService.processUrl({ url, userNote });
+    const result = await contentService.processUrl({ url, userNote });
 
-      // Format response
-      return c.json(
-        successResponse({
-          content: {
-            id: result.contentId,
-            type: result.type,
-            title: result.title,
-            description: result.description,
-            url: result.url,
-            imageUrl: result.imageUrl,
-          },
-          chunksCreated: result.chunksCreated,
-        })
-      );
-    } catch (error: unknown) {
-      return c.json(errorResponse(getSafeErrorMessage(error)), 500);
-    }
+    return c.json(
+      successResponse({
+        content: {
+          id: result.contentId,
+          type: result.type,
+          title: result.title,
+          description: result.description,
+          url: result.url,
+          imageUrl: result.imageUrl,
+        },
+        chunksCreated: result.chunksCreated,
+      })
+    );
+  } catch (error: unknown) {
+    return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-);
+};
 
 /**
- * GET /api/urls/failed
  * Get all failed content items
+ * GET /api/urls/failed
  */
-urlController.get('/failed', async (c) => {
+export const handleGetFailedUrls = async (c: Context) => {
   try {
     const failedContents = await contentRepository.findFailed();
 
@@ -75,21 +59,18 @@ urlController.get('/failed', async (c) => {
     console.error('[Failed] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-});
+};
 
 /**
- * POST /api/urls/retry/:id
  * Retry a failed content item
+ * POST /api/urls/retry/:id
  */
-urlController.post('/retry/:id', async (c) => {
+export const handleRetryUrl = async (c: Context) => {
   try {
-    // Extract request data
-    const { id } = c.req.param();
+    const id = c.req.param('id');
 
-    // Delegate to service layer
     const result = await contentService.retryFailedContent(id);
 
-    // Format response
     return c.json(successResponse({ contentId: id, chunksCreated: result.chunksCreated }));
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : getSafeErrorMessage(error);
@@ -108,6 +89,4 @@ urlController.post('/retry/:id', async (c) => {
     console.error('[Retry] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-});
-
-export { urlController };
+};

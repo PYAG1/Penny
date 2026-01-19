@@ -1,17 +1,15 @@
-import { Hono } from 'hono';
+import { Context } from 'hono';
 import { contentService } from '../services/content.service';
 import { successResponse, errorResponse } from '../utils/response';
 import { getSafeErrorMessage } from '../utils/error';
-
-const imageController = new Hono();
+import { CreateImageSchema } from '../lib/validation';
 
 /**
+ * Handle image uploads
  * POST /api/images
- * Upload and process images/screenshots
  */
-imageController.post('/', async (c) => {
+export const handleUploadImages = async (c: Context) => {
   try {
-    // Extract request data
     const formData = await c.req.formData();
     const context = formData.get('context') as string | undefined;
 
@@ -33,7 +31,6 @@ imageController.post('/', async (c) => {
       return c.json(errorResponse('No images provided'), 400);
     }
 
-    // Delegate to service layer
     const results = await Promise.all(
       files.map((file) =>
         contentService.processImage({
@@ -45,7 +42,6 @@ imageController.post('/', async (c) => {
       )
     );
 
-    // Format response
     const successful = results.filter((r) => r.success);
     const failed = results.filter((r) => !r.success);
 
@@ -61,6 +57,4 @@ imageController.post('/', async (c) => {
     console.error('[Images] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-});
-
-export { imageController };
+};

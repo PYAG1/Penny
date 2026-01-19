@@ -1,43 +1,32 @@
-import { Hono } from 'hono';
+import { Context } from 'hono';
 import { generateEmbedding } from '../lib/ai/embeddings';
 import { contentRepository } from '../repositories';
 import { successResponse, errorResponse } from '../utils/response';
 import { getSafeErrorMessage } from '../utils/error';
-
-const searchController = new Hono();
+import { SearchQueryInput } from '../lib/validation';
 
 /**
+ * Handle search
  * GET /api/search
- * Semantic search across images and content
- *
- * Query params:
- * - q: Search query (required)
- * - type: Filter by type (image, webpage, youtube, all) - default: all
- * - limit: Max results (default: 20)
  */
-searchController.get('/', async (c) => {
+export const handleSearch = async (c: Context) => {
   try {
-    const query = c.req.query('q');
-    const type = (c.req.query('type') || 'all') as 'image' | 'webpage' | 'youtube' | 'all';
-    const limit = parseInt(c.req.query('limit') || '20', 10);
-
-    if (!query) {
-      return c.json(errorResponse('Query parameter "q" is required'), 400);
-    }
+    // Validated by zValidator in route
+    const { q, type, limit } = (c as any).req.valid('query') as SearchQueryInput;
 
     // Generate embedding for the search query
-    const queryEmbedding = await generateEmbedding(query);
+    const queryEmbedding = await generateEmbedding(q);
 
     // Search contents using vector similarity
     const results = await contentRepository.searchByEmbedding(queryEmbedding, {
-      limit,
+      limit: limit || 20,
       threshold: 0.3,
       type,
     });
 
     return c.json(
       successResponse({
-        query,
+        query: q,
         total: results.length,
         results: results.map((r) => ({
           id: r.id,
@@ -58,15 +47,16 @@ searchController.get('/', async (c) => {
     console.error('[Search] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-});
+};
 
 /**
- * GET /api/search/recent
  * Get recently added content
+ * GET /api/search/recent
  */
-searchController.get('/recent', async (c) => {
+export const handleGetRecent = async (c: Context) => {
   try {
-    const limit = parseInt(c.req.query('limit') || '20', 10);
+    // We can assume limit is validated if we add validation to this route too
+    const { limit } = (c as any).req.valid('query') as { limit: number };
 
     const contents = await contentRepository.findRecent(limit);
 
@@ -89,6 +79,4 @@ searchController.get('/recent', async (c) => {
     console.error('[Recent] Error:', error);
     return c.json(errorResponse(getSafeErrorMessage(error)), 500);
   }
-});
-
-export { searchController };
+};
