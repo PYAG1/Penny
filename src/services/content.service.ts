@@ -2,8 +2,10 @@ import { nanoid } from 'nanoid';
 import { contentRepository } from '../repositories';
 import { blobStorageService } from '../lib/storage/blob';
 import { imageAnalysisService } from '../lib/ai/image-analysis';
+import { documentAnalysisService } from '../lib/ai/document-analysis';
 import { webExtractionService } from '../lib/extraction/web';
 import { youtubeExtractionService } from '../lib/extraction/youtube';
+import { pdfExtractionService } from '../lib/extraction/pdf';
 import { generateEmbeddings, chunkText, chunkDocument } from '../lib/ai/embeddings';
 import { getErrorMessage } from '../utils/error';
 
@@ -35,6 +37,22 @@ export interface ProcessUrlOutput {
   url: string;
   imageUrl: string | null;
   chunksCreated: number;
+}
+
+export interface ProcessDocumentInput {
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  context?: string;
+}
+
+export interface ProcessDocumentOutput {
+  success: boolean;
+  contentId: string;
+  title?: string;
+  pageCount?: number;
+  chunksCreated?: number;
+  error?: string;
 }
 
 /**
@@ -81,6 +99,7 @@ export class ContentService {
           fileSize: input.buffer.length,
         },
       });
+
 
       // Step 5: Chunk the content and generate embeddings
       const textForEmbedding = `${title}\n${description}\n${metadata.tags.join(' ')}`;
@@ -307,6 +326,119 @@ export class ContentService {
       await contentRepository.updateStatus(contentId, 'failed', errorMsg);
 
       throw new Error(`Failed to retry content: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Process a PDF document: upload to blob, extract text, analyze with AI, chunk, and embed
+   */
+  async processDocument(input: ProcessDocumentInput): Promise<ProcessDocumentOutput> {
+    const contentId = `doc_${nanoid()}`;
+
+    try {
+      // Step 1: Validate PDF
+      if (!pdfExtractionService.isValidPdf(input.buffer)) {
+        throw new Error('Invalid PDF file');
+      }
+
+      // Step 2: Upload to blob storage
+      const fileUrl = await blobStorageService.uploadFile(
+        input.buffer,
+        `${contentId}-${input.filename}`,
+        input.contentType
+      );
+
+      // Step 3: Extract text and PDF metadata
+      const extracted = await pdfExtractionService.extract(input.buffer);
+
+      // Step 4: Check if PDF has extractable text
+      if (!extracted.text || extracted.text.trim().length < 50) {
+        throw new Error('PDF appears to be scanned or has no extractable text');
+      }
+
+      // Step 5: Analyze with AI for rich metadata
+      const aiMetadata = await documentAnalysisService.analyze(extracted.text, input.context);
+
+      // Step 6: Create content record
+      const title = aiMetadata.title || extracted.metadata.title || input.filename;
+      const description = aiMetadata.description || 'PDF document';
+
+      const content = await contentRepository.create({
+        id: contentId,
+        type: 'document',
+        url: null,
+        fileUrl,
+        title,
+        description,
+        contentPreview: extracted.text.substring(0, 500),
+        imageUrl: null, // Could add first-page thumbnail later
+        status: 'completed',
+        metadata: {
+          tags: aiMetadata.tags,
+          context: input.context,
+          originalFilename: input.filename,
+          fileSize: input.buffer.length,
+          mimeType: input.contentType,
+          pageCount: extracted.pageCount,
+          pdfMetadata: extracted.metadata,
+        },
+      });
+
+      // Step 7: Chunk the content and generate embeddings
+      const fullText = `${title}\n${description}\n${aiMetadata.tags.join(' ')}\n${extracted.text}`;
+      const textChunks = fullText.length > 5000 ? chunkDocument(fullText) : chunkText(fullText);
+      const embeddings = await generateEmbeddings(textChunks.map((c) => c.content));
+
+      // Step 8: Save chunks with embeddings
+      await contentRepository.createChunks(
+        contentId,
+        textChunks.map((chunk, i) => ({
+          chunkIndex: chunk.chunkIndex,
+          content: chunk.content,
+          embedding: embeddings[i],
+          startOffset: chunk.startOffset,
+          endOffset: chunk.endOffset,
+          section: chunk.section,
+        }))
+      );
+
+      return {
+        success: true,
+        contentId,
+        title: content.title,
+        pageCount: extracted.pageCount,
+        chunksCreated: textChunks.length,
+      };
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error);
+      console.error(`[ContentService] Failed to process document ${input.filename}:`, errorMsg);
+
+      // Record failure in database
+      try {
+        await contentRepository.create({
+          id: contentId,
+          type: 'document',
+          url: null,
+          title: input.filename,
+          description: 'Failed to process',
+          status: 'failed',
+          errorMessage: errorMsg,
+          metadata: {
+            originalFilename: input.filename,
+          },
+        });
+      } catch (recordError: unknown) {
+        console.error(
+          `[ContentService] Failed to record document failure:`,
+          getErrorMessage(recordError)
+        );
+      }
+
+      return {
+        success: false,
+        contentId,
+        error: errorMsg,
+      };
     }
   }
 }
