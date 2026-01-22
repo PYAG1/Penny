@@ -8,7 +8,7 @@ import {
   vector,
   pgEnum,
 } from 'drizzle-orm/pg-core';
-export const contentTypeEnum = pgEnum('content_type', ['image', 'webpage', 'youtube']);
+export const contentTypeEnum = pgEnum('content_type', ['image', 'webpage', 'youtube', 'document']);
 export const contentStatusEnum = pgEnum('content_status', ['pending', 'processing', 'completed', 'failed']);
 
 // Embedding dimensions (Google text-embedding-001)
@@ -21,6 +21,7 @@ export const contents = pgTable(
     id: text('id').primaryKey(),
     type: contentTypeEnum('type').notNull(),
     url: text('url'),
+    fileUrl: text('file_url'),
     title: text('title').notNull(),
     description: text('description').notNull(),
     contentPreview: text('content_preview'),
@@ -41,6 +42,19 @@ export const contents = pgTable(
       context?: string;
       originalFilename?: string;
       fileSize?: number;
+
+      mimeType?: string;
+      pageCount?: number;
+      pdfMetadata?: {
+        title?: string;
+        author?: string;
+        subject?: string;
+        keywords?: string;
+        creator?: string;
+        producer?: string;
+        creationDate?: string;
+        modificationDate?: string;
+      };
     }>().default({}),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -83,5 +97,5 @@ export type Content = typeof contents.$inferSelect;
 export type NewContent = typeof contents.$inferInsert;
 export type ContentChunk = typeof contentChunks.$inferSelect;
 export type NewContentChunk = typeof contentChunks.$inferInsert;
-export type ContentType = 'image' | 'webpage' | 'youtube';
+export type ContentType = 'image' | 'webpage' | 'youtube' | 'document';
 export type ContentStatus = 'pending' | 'processing' | 'completed' | 'failed';

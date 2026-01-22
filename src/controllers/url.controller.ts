@@ -35,8 +35,36 @@ export const handleProcessUrl = async (c: Context) => {
 };
 
 /**
+ * Get all URLs
+ * GET /api/contents/urls
+ */
+export const handleGetAllUrls = async (c: Context) => {
+  try {
+    const urls = await contentRepository.findByType(['webpage', 'youtube']);
+
+    return c.json(
+      successResponse({
+        total: urls.length,
+        contents: urls.map((item) => ({
+          id: item.id,
+          type: item.type,
+          url: item.url,
+          title: item.title,
+          description: item.description,
+          imageUrl: item.imageUrl,
+          status: item.status,
+          createdAt: item.createdAt,
+        })),
+      })
+    );
+  } catch (error: unknown) {
+    return c.json(errorResponse(getSafeErrorMessage(error)), 500);
+  }
+};
+
+/**
  * Get all failed content items
- * GET /api/urls/failed
+ * GET /api/contents/failed
  */
 export const handleGetFailedUrls = async (c: Context) => {
   try {
