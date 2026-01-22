@@ -1,11 +1,131 @@
 {
-  "id": "d38f447e-35ef-44ec-9215-7e804af97a2a",
+  "id": "408ad253-bb20-435b-be09-a27b31975624",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.bookmarks": {
-      "name": "bookmarks",
+    "public.content_chunks": {
+      "name": "content_chunks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "content_id": {
+          "name": "content_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chunk_index": {
+          "name": "chunk_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_offset": {
+          "name": "start_offset",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_offset": {
+          "name": "end_offset",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "section": {
+          "name": "section",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_content_chunks_content_id": {
+          "name": "idx_content_chunks_content_id",
+          "columns": [
+            {
+              "expression": "content_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_content_chunks_embedding": {
+          "name": "idx_content_chunks_embedding",
+          "columns": [
+            {
+              "expression": "embedding",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "vector_cosine_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "content_chunks_content_id_contents_id_fk": {
+          "name": "content_chunks_content_id_contents_id_fk",
+          "tableFrom": "content_chunks",
+          "tableTo": "contents",
+          "columnsFrom": [
+            "content_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contents": {
+      "name": "contents",
       "schema": "",
       "columns": {
         "id": {
@@ -16,7 +136,7 @@
         },
         "type": {
           "name": "type",
-          "type": "bookmark_type",
+          "type": "content_type",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
@@ -51,15 +171,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "embedding": {
-          "name": "embedding",
-          "type": "vector(1536)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
-          "type": "bookmark_status",
+          "type": "content_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
@@ -107,8 +221,8 @@
         }
       },
       "indexes": {
-        "idx_bookmarks_type": {
-          "name": "idx_bookmarks_type",
+        "idx_contents_type": {
+          "name": "idx_contents_type",
           "columns": [
             {
               "expression": "type",
@@ -122,8 +236,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_bookmarks_status": {
-          "name": "idx_bookmarks_status",
+        "idx_contents_status": {
+          "name": "idx_contents_status",
           "columns": [
             {
               "expression": "status",
@@ -137,8 +251,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_bookmarks_created_at": {
-          "name": "idx_bookmarks_created_at",
+        "idx_contents_created_at": {
+          "name": "idx_contents_created_at",
           "columns": [
             {
               "expression": "created_at",
@@ -162,8 +276,8 @@
     }
   },
   "enums": {
-    "public.bookmark_status": {
-      "name": "bookmark_status",
+    "public.content_status": {
+      "name": "content_status",
       "schema": "public",
       "values": [
         "pending",
@@ -172,8 +286,8 @@
         "failed"
       ]
     },
-    "public.bookmark_type": {
-      "name": "bookmark_type",
+    "public.content_type": {
+      "name": "content_type",
       "schema": "public",
       "values": [
         "image",
