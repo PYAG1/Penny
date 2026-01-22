@@ -17,6 +17,24 @@ export const blobStorageService = {
     return blob.url;
   },
 
+
+  async uploadPdf(buffer: Buffer, filename: string): Promise<string> {
+    const blob = await put(`documents/${filename}`, buffer, {
+      access: 'public',
+      contentType: 'application/pdf',
+    });
+    return blob.url;
+  },
+
+  async uploadFile(buffer: Buffer, filename: string, contentType: string): Promise<string> {
+    const folder = contentType.startsWith('image/') ? 'images' : 'documents';
+    const blob = await put(`${folder}/${filename}`, buffer, {
+      access: 'public',
+      contentType,
+    });
+    return blob.url;
+  },
+
   /**
    * Delete an image from Vercel Blob storage
    */

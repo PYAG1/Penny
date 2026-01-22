@@ -65,6 +65,23 @@ export const noteMetadataSchema = baseMetadataSchema.extend({
   version: z.number().int().positive().optional(),
 });
 
+export const documentMetadataSchema = baseMetadataSchema.extend({
+  originalFilename: z.string().optional(),
+  fileSize: z.number().int().positive().optional(),
+  mimeType: z.string().optional(),
+  pageCount: z.number().int().positive().optional(),
+  pdfMetadata: z.object({
+    title: z.string().optional(),
+    author: z.string().optional(),
+    subject: z.string().optional(),
+    keywords: z.string().optional(),
+    creator: z.string().optional(),
+    producer: z.string().optional(),
+    creationDate: z.string().optional(),
+    modificationDate: z.string().optional(),
+  }).optional(),
+});
+
 export const contentMetadataSchema = z.discriminatedUnion('contentType', [
   z.object({
     contentType: z.literal('image'),
@@ -82,11 +99,15 @@ export const contentMetadataSchema = z.discriminatedUnion('contentType', [
     contentType: z.literal('note'),
     data: noteMetadataSchema,
   }),
+  z.object({
+    contentType: z.literal('document'),
+    data: documentMetadataSchema,
+  }),
 ]);
 
 // Validation functions
 export function validateMetadata(
-  contentType: 'image' | 'webpage' | 'youtube' | 'note',
+  contentType: 'image' | 'webpage' | 'youtube' | 'note' | 'document',
   metadata: unknown
 ) {
   let schema: z.ZodType;
@@ -103,6 +124,9 @@ export function validateMetadata(
       break;
     case 'note':
       schema = noteMetadataSchema;
+      break;
+    case 'document':
+      schema = documentMetadataSchema;
       break;
     default:
       throw new Error(`Unknown content type: ${contentType}`);
@@ -112,7 +136,7 @@ export function validateMetadata(
 }
 
 export function safeValidateMetadata(
-  contentType: 'image' | 'webpage' | 'youtube' | 'note',
+  contentType: 'image' | 'webpage' | 'youtube' | 'note' | 'document',
   metadata: unknown
 ) {
   let schema: z.ZodType;
@@ -129,6 +153,9 @@ export function safeValidateMetadata(
       break;
     case 'note':
       schema = noteMetadataSchema;
+      break;
+    case 'document':
+      schema = documentMetadataSchema;
       break;
     default:
       return {

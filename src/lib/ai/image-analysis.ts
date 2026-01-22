@@ -1,5 +1,5 @@
 import { google } from '@ai-sdk/google';
-import { generateObject } from 'ai';
+import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
 const imageMetadataSchema = z.object({
@@ -15,8 +15,6 @@ export const imageAnalysisService = {
    * Analyze an image using Gemini Vision and extract metadata
    */
   async analyze(imageBuffer: Buffer, contentType: string, context?: string): Promise<ImageMetadata> {
-    const base64Image = `data:${contentType};base64,${imageBuffer.toString('base64')}`;
-
     const prompt = context
       ? `Analyze this screenshot/image. User provided context: "${context}".
          Extract a descriptive title, detailed description, and relevant tags for search.`
@@ -24,21 +22,22 @@ export const imageAnalysisService = {
          Extract a descriptive title, detailed description, and relevant tags for search.
          Focus on: text content, UI elements, data visualizations, or any notable content.`;
 
-    const result = await generateObject({
+    const result = await generateText({
       model: google('gemini-2.0-flash-exp'),
-      schema: imageMetadataSchema,
+      output: Output.object({ schema: imageMetadataSchema }),
       messages: [
         {
           role: 'user',
           content: [
             { type: 'text', text: prompt },
-            { type: 'image', image: base64Image },
+            { type: 'image', image: imageBuffer, mediaType: contentType },
           ],
         },
       ],
     });
 
-    return result.object;
+    console.log('[Image Analysis] Result:', result?.output);
+    return result.output!;
   },
 
   /**
