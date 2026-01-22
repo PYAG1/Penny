@@ -8,9 +8,11 @@ import {
     type ContentChunk,
     type NewContentChunk,
 } from '../lib/db';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, inArray } from 'drizzle-orm';
 
 export const contentRepository = {
+
+    
     /**
      * Create a new content
      */
@@ -67,6 +69,27 @@ export const contentRepository = {
     },
 
     /**
+     * Get all contents
+     */
+    async findAll(): Promise<Content[]> {
+        return db
+            .select()
+            .from(contents)
+            .orderBy(desc(contents.createdAt));
+    },
+
+    /**
+     * Get contents by type(s)
+     */
+    async findByType(types: ('image' | 'webpage' | 'youtube' | 'document')[]): Promise<Content[]> {
+        return db
+            .select()
+            .from(contents)
+            .where(inArray(contents.type, types))
+            .orderBy(desc(contents.createdAt));
+    },
+
+    /**
      * Search contents using vector similarity on chunks
      * Returns contents with their best matching chunk
      */
@@ -75,7 +98,7 @@ export const contentRepository = {
         options: {
             limit?: number;
             threshold?: number;
-            type?: 'image' | 'webpage' | 'youtube' | 'all';
+            type?: 'image' | 'webpage' | 'youtube' | 'document' | 'all';
         } = {}
     ): Promise<(Content & { similarity: number; matchedChunk: string; matchedSection?: string })[]> {
         const { limit = 20, threshold = 0.3, type = 'all' } = options;
